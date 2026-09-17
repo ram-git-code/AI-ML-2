@@ -1,33 +1,33 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List, Any, Union
-from pydantic import BaseModel, Field, model_validator
+from typing import Optional, List, Any
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from app.models.enums import QuestionType, Difficulty
 
 class QuestionBase(BaseModel):
-    question_type: QuestionType = Field(..., example=QuestionType.MCQ)
-    question_text: str = Field(..., example="What is the capital of Rajasthan?")
+    question_type: QuestionType = Field(..., examples=[QuestionType.MCQ])
+    question_text: str = Field(..., examples=["What is the capital of Rajasthan?"])
     options: Optional[Any] = Field(
         default=None,
-        example=["A. Jaipur", "B. Jodhpur", "C. Udaipur", "D. Kota"],
+        examples=[["A. Jaipur", "B. Jodhpur", "C. Udaipur", "D. Kota"]],
         description="Choice options for MCQ (List or JSON structure)"
     )
-    correct_answer: Optional[str] = Field(default=None, example="A. Jaipur")
+    correct_answer: Optional[str] = Field(default=None, examples=["A. Jaipur"])
     explanation: Optional[str] = Field(
         default=None,
-        example="Jaipur is the largest city and capital of Rajasthan state."
+        examples=["Jaipur is the largest city and capital of Rajasthan state."]
     )
-    subject: str = Field(..., example="Rajasthan GK")
-    chapter: str = Field(..., example="Geography")
-    topic: str = Field(..., example="Capitals and Major Cities")
-    difficulty: Difficulty = Field(default=Difficulty.MEDIUM, example=Difficulty.MEDIUM)
-    tags: Optional[List[str]] = Field(default=[], example=["GK", "Rajasthan", "State Capital"])
-    is_pyq: bool = Field(default=False, example=True)
-    exam_name: Optional[str] = Field(default=None, example="REET")
-    exam_year: Optional[int] = Field(default=None, example=2024)
-    exam_month: Optional[int] = Field(default=None, example=5)
-    exam_day: Optional[int] = Field(default=None, example=12)
-    source: Optional[str] = Field(default=None, example="RPSC 2024 Official Paper")
+    subject: str = Field(..., examples=["Rajasthan GK"])
+    chapter: str = Field(..., examples=["Geography"])
+    topic: str = Field(..., examples=["Capitals and Major Cities"])
+    difficulty: Difficulty = Field(default=Difficulty.MEDIUM, examples=[Difficulty.MEDIUM])
+    tags: Optional[List[str]] = Field(default=[], examples=[["GK", "Rajasthan", "State Capital"]])
+    is_pyq: bool = Field(default=False, examples=[True])
+    exam_name: Optional[str] = Field(default=None, examples=["REET"])
+    exam_year: Optional[int] = Field(default=None, examples=[2024])
+    exam_month: Optional[int] = Field(default=None, examples=[5])
+    exam_day: Optional[int] = Field(default=None, examples=[12])
+    source: Optional[str] = Field(default=None, examples=["RPSC 2024 Official Paper"])
 
 class QuestionCreate(QuestionBase):
 
@@ -66,8 +66,7 @@ class QuestionResponse(QuestionBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class QuestionFilterParams(BaseModel):
     subject: Optional[str] = None

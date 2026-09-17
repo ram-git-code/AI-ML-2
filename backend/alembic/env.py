@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.config import settings
 from app.db.postgres import Base
 from app.models.question import QuestionModel  # Ensure models are loaded into Base.metadata
+from app.models.quiz import QuizModel
 
 config = context.config
 

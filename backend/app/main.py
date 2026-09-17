@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.api import health, questions
+from app.api import health, questions, quizzes, ai
 
 setup_logging()
 
@@ -34,3 +34,5 @@ async def root():
 # Include Routers
 app.include_router(health.router)
 app.include_router(questions.router)
+app.include_router(quizzes.router)
+app.include_router(ai.router)
