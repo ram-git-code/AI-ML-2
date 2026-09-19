@@ -2,6 +2,11 @@ import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';
 
+export const getQuestionSubjects = async (): Promise<string[]> => {
+  const response = await axios.get<string[]>(`${API_BASE_URL}/api/questions/subjects`);
+  return response.data;
+};
+
 export interface QuizQuestion {
   id: string;
   question_type: string;

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Sparkles, Activity, BookOpen, GraduationCap } from 'lucide-react';
+import { Sparkles, Activity, FileJson, GraduationCap } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { QuizGeneratorChat } from './components/QuizGeneratorChat';
 import { QuizPlayer } from './components/QuizPlayer';
 import { QuizData } from './api/quizApi';
+import { QuestionBankImport } from './components/QuestionBankImport';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'quiz' | 'dashboard'>('quiz');
+  const [activeTab, setActiveTab] = useState<'quiz' | 'import' | 'dashboard'>('quiz');
   const [activeQuiz, setActiveQuiz] = useState<QuizData | null>(null);
 
   const handleQuizGenerated = (quiz: QuizData) => {
@@ -27,7 +28,7 @@ export const App: React.FC = () => {
           </div>
           <div className="brand-text">
             <span className="brand-name">EduAI Quiz Tutor</span>
-            <span className="brand-tag">PostgreSQL • NVIDIA AI • RAG</span>
+            <span className="brand-tag">PostgreSQL • Gemini • RAG</span>
           </div>
         </div>
 
@@ -37,6 +38,12 @@ export const App: React.FC = () => {
             onClick={() => setActiveTab('quiz')}
           >
             <Sparkles size={16} /> AI Quiz Studio
+          </button>
+          <button
+            className={`nav-tab-btn ${activeTab === 'import' ? 'active' : ''}`}
+            onClick={() => setActiveTab('import')}
+          >
+            <FileJson size={16} /> Question Bank
           </button>
           <button
             className={`nav-tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
@@ -57,6 +64,8 @@ export const App: React.FC = () => {
               <QuizGeneratorChat onQuizGenerated={handleQuizGenerated} />
             )}
           </div>
+        ) : activeTab === 'import' ? (
+          <QuestionBankImport />
         ) : (
           <Dashboard />
         )}

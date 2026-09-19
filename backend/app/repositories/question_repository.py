@@ -8,6 +8,16 @@ from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionFilterP
 class QuestionRepository:
 
     @staticmethod
+    def list_subjects(db: Session) -> List[str]:
+        stmt = (
+            select(QuestionModel.subject)
+            .where(QuestionModel.subject.is_not(None))
+            .distinct()
+            .order_by(QuestionModel.subject)
+        )
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
     def create(db: Session, schema: QuestionCreate) -> QuestionModel:
         db_obj = QuestionModel(**schema.model_dump())
         db.add(db_obj)

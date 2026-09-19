@@ -1,6 +1,7 @@
+import json
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 from app.db.postgres import get_db
 from app.schemas.question import (
@@ -11,8 +12,39 @@ from app.schemas.question import (
 )
 from app.models.enums import QuestionType, Difficulty
 from app.services.question_service import QuestionService
+from app.repositories.question_repository import QuestionRepository
+from app.services.question_import_jobs import create_import_job, get_import_job
+from app.schemas.question_import import QuestionImportResponse
 
 router = APIRouter(prefix="/api/questions", tags=["Question Management"])
+
+@router.get("/subjects", response_model=List[str], summary="List subjects available in PostgreSQL")
+def list_subjects(db: Session = Depends(get_db)):
+    return QuestionRepository.list_subjects(db)
+
+@router.post("/import", response_model=QuestionImportResponse, status_code=status.HTTP_201_CREATED)
+async def import_question_file(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".json"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Upload a .json file.")
+    try:
+        payload = json.loads(await file.read())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail=f"Invalid JSON file: {error}") from error
+    if not isinstance(payload.get("Questions"), list) or not payload["Questions"]:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="JSON must contain a non-empty 'Questions' array.")
+    job = create_import_job(payload)
+    return QuestionImportResponse(job_id=job.job_id, status=job.status, total=job.total, imported=0, embedded=0, message="Import started in the background.")
+
+@router.get("/import/{job_id}", response_model=QuestionImportResponse)
+def import_status(job_id: str):
+    from fastapi import HTTPException
+    job = get_import_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Import job not found or expired.")
+    return QuestionImportResponse(job_id=job.job_id, status=job.status, total=job.total, imported=job.imported, embedded=job.embedded, message=job.error or "")
 
 @router.post(
     "",

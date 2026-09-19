@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export interface AIExplanation {
   question_id: string;
@@ -35,11 +35,13 @@ export const getAIExplanation = async (
 
 export const sendTutorMessage = async (
   questionId: string | null,
+  subject: string | null,
   userMessage: string,
   chatHistory: ChatMessage[]
 ): Promise<AITutorResponse> => {
   const response = await axios.post<AITutorResponse>(`${API_BASE_URL}/api/ai/tutor`, {
     question_id: questionId || undefined,
+    subject: subject || undefined,
     user_message: userMessage,
     chat_history: chatHistory,
   });

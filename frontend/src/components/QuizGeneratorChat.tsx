@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Send, BookOpen, Layers, HelpCircle, AlertCircle } from 'lucide-react';
-import { generateQuiz, QuizData } from '../api/quizApi';
+import { generateQuiz, getQuestionSubjects, QuizData } from '../api/quizApi';
 
 interface QuizGeneratorChatProps {
   onQuizGenerated: (quiz: QuizData) => void;
@@ -11,6 +11,12 @@ export const QuizGeneratorChat: React.FC<QuizGeneratorChatProps> = ({ onQuizGene
   const [numQuestions, setNumQuestions] = useState<number>(5);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState('');
+
+  React.useEffect(() => {
+    getQuestionSubjects().then(setSubjects).catch(() => setSubjects([]));
+  }, []);
 
   const presetChips = [
     { label: '🏛️ Rajasthan GK PYQs', query: 'Give me 5 Rajasthan GK PYQs', count: 5 },
@@ -32,7 +38,7 @@ export const QuizGeneratorChat: React.FC<QuizGeneratorChatProps> = ({ onQuizGene
     setLoading(true);
     setError(null);
     try {
-      const quiz = await generateQuiz(textToUse, countToUse);
+      const quiz = await generateQuiz(textToUse, countToUse, selectedSubject || undefined);
       onQuizGenerated(quiz);
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Failed to generate quiz. Please try a different query.';
@@ -102,6 +108,18 @@ export const QuizGeneratorChat: React.FC<QuizGeneratorChatProps> = ({ onQuizGene
         />
         <div className="input-options">
           <label className="count-selector-label">
+            Subject:
+            <select
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className="count-select"
+              disabled={loading}
+            >
+              <option value="">All subjects</option>
+              {subjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+            </select>
+          </label>
+          <label className="count-selector-label">
             Questions:
             <select
               value={numQuestions}
@@ -135,7 +153,7 @@ export const QuizGeneratorChat: React.FC<QuizGeneratorChatProps> = ({ onQuizGene
 
       <div className="generator-footer-tips">
         <div className="tip-item">
-          <BookOpen size={14} /> <span>Questions selected from verified PostgreSQL source of truth</span>
+            <BookOpen size={14} /> <span>Questions selected from the verified question bank</span>
         </div>
         <div className="tip-item">
           <Layers size={14} /> <span>1 question shown at a time with instant green/red evaluation</span>

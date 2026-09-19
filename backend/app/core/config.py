@@ -17,12 +17,19 @@ class Settings(BaseSettings):
     # Embedding Model
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
 
-    # NVIDIA API
-    NVIDIA_API_KEY: str = "your_nvidia_api_key_here"
-    NVIDIA_MODEL: str = "meta/llama-3.1-70b-instruct"
+    # Google AI Studio / Gemini
+    GOOGLE_API_KEY: str = ""
+    GOOGLE_MODEL: str = "gemini-3.6-flash"
+    GOOGLE_EMBEDDING_MODEL: str = "gemini-embedding-001"
 
     # CORS Configuration
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]
+    CORS_ORIGINS: Union[List[str], str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+    ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     def parse_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

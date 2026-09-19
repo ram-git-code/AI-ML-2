@@ -91,26 +91,30 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onReset }) => {
     return Object.values(answers).filter((a) => a.is_correct).length;
   };
 
-  const isOptionSelected = (parsedLabel: string, parsedText: string) => {
-    if (!currentAnswer) return false;
-    const sel = currentAnswer.selected_answer;
-    if (typeof sel === 'string') {
-      return sel.toLowerCase().includes(parsedLabel.toLowerCase()) || sel.toLowerCase() === parsedText.toLowerCase();
-    } else if (sel && typeof sel === 'object') {
-      return (sel.Key === parsedLabel || sel.Text === parsedText);
+  const normalize = (value: any): string => (value == null ? '' : String(value).trim().toLowerCase());
+
+  const matchesParsedOption = (parsedLabel: string, parsedText: string, parsedFull: string, answer: any): boolean => {
+    if (answer == null) return false;
+    if (typeof answer === 'object') {
+      const key = normalize(answer.Key ?? answer.key ?? answer.label).toUpperCase();
+      const text = normalize(answer.Text ?? answer.text ?? answer.value);
+      return key === parsedLabel.toUpperCase() || (!!text && text === normalize(parsedText));
     }
-    return false;
+    const a = normalize(answer);
+    if (!a) return false;
+    if (a === normalize(parsedFull) || a === normalize(parsedText) || a === normalize(parsedLabel)) return true;
+    const prefixMatch = a.match(/^([a-e])\s*[.)\-:]\s*/);
+    return !!prefixMatch && prefixMatch[1].toUpperCase() === parsedLabel.toUpperCase();
   };
 
-  const isOptionCorrect = (parsedLabel: string, parsedText: string) => {
+  const isOptionSelected = (parsedLabel: string, parsedText: string, parsedFull: string) => {
+    if (!currentAnswer) return false;
+    return matchesParsedOption(parsedLabel, parsedText, parsedFull, currentAnswer.selected_answer);
+  };
+
+  const isOptionCorrect = (parsedLabel: string, parsedText: string, parsedFull: string) => {
     if (!currentAnswer || !currentAnswer.correct_answer) return false;
-    const corr = currentAnswer.correct_answer.toLowerCase();
-    return (
-      corr === parsedLabel.toLowerCase() ||
-      corr.startsWith(`${parsedLabel.toLowerCase()}.`) ||
-      corr.includes(parsedText.toLowerCase()) ||
-      parsedText.toLowerCase().includes(corr)
-    );
+    return matchesParsedOption(parsedLabel, parsedText, parsedFull, currentAnswer.correct_answer);
   };
 
   const answeredCount = Object.keys(answers).length;
@@ -186,8 +190,8 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onReset }) => {
         <div className="options-grid">
           {rawOptions.map((optRaw, idx) => {
             const parsed = parseOption(optRaw, idx);
-            const isSelected = isOptionSelected(parsed.label, parsed.text);
-            const isCorrect = isOptionCorrect(parsed.label, parsed.text);
+            const isSelected = isOptionSelected(parsed.label, parsed.text, parsed.full);
+            const isCorrect = isOptionCorrect(parsed.label, parsed.text, parsed.full);
             const isAnswered = !!currentAnswer;
 
             let optionClass = 'option-btn';
@@ -277,26 +281,24 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onReset }) => {
               </div>
             ) : (
               <div className="ai-action-bar">
-                <button
-                  className="btn-ask-ai-deep"
-                  onClick={() =>
-                    fetchAiExplanation(
-                      currentQ.id,
-                      typeof currentAnswer.selected_answer === 'string'
-                        ? currentAnswer.selected_answer
-                        : 'Option'
-                    )
-                  }
-                  disabled={loadingAi}
-                >
-                  {loadingAi ? (
-                    'Analyzing with AI...'
-                  ) : (
-                    <>
-                      <Sparkles size={16} /> Ask AI Deep Explanation
-                    </>
-                  )}
-                </button>
+                {loadingAi && !currentAnswer.is_correct ? (
+                  <span className="ai-explanation-loading"><Sparkles size={16} /> AI is explaining this answer...</span>
+                ) : (
+                  <button
+                    className="btn-ask-ai-deep"
+                    onClick={() =>
+                      fetchAiExplanation(
+                        currentQ.id,
+                        typeof currentAnswer.selected_answer === 'string'
+                          ? currentAnswer.selected_answer
+                          : 'Option'
+                      )
+                    }
+                    disabled={loadingAi}
+                  >
+                    <Sparkles size={16} /> Ask AI Deep Explanation
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 import re
 import uuid
 import random
+from dataclasses import dataclass, field
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
@@ -17,8 +18,24 @@ from app.schemas.quiz import (
     QuizAnswerResponse,
     QuizSummaryResponse,
 )
+from app.schemas.question import QuestionFilterParams
 from app.repositories.quiz_repository import QuizRepository
 from app.repositories.question_repository import QuestionRepository
+
+
+@dataclass
+class JsonQuizSession:
+    id: uuid.UUID
+    title: str
+    query_prompt: Optional[str]
+    question_ids: list[str]
+    total_questions: int
+    score: int = 0
+    completed: bool = False
+    answers: dict = field(default_factory=dict)
+
+
+JSON_QUIZ_SESSIONS: dict[uuid.UUID, JsonQuizSession] = {}
 
 class QuizService:
 
@@ -85,28 +102,15 @@ class QuizService:
             if q_count and count == 5:  # default was 5
                 count = min(max(q_count, 1), 50)
 
-        # Build query targeting MCQs with options
-        stmt = select(QuestionModel).where(QuestionModel.question_type == QuestionType.MCQ)
-
-        if subject:
-            stmt = stmt.where(QuestionModel.subject.ilike(f"%{subject}%"))
-        if is_pyq is not None:
-            stmt = stmt.where(QuestionModel.is_pyq == is_pyq)
-        if difficulty:
-            stmt = stmt.where(QuestionModel.difficulty == difficulty)
-
-        questions = list(db.scalars(stmt).all())
-
-        # If strict filtering returned no questions, fallback to wider search
-        if not questions:
-            fallback_stmt = select(QuestionModel).where(QuestionModel.question_type == QuestionType.MCQ)
-            if subject:
-                fallback_stmt = fallback_stmt.where(QuestionModel.subject.ilike(f"%{subject}%"))
-            questions = list(db.scalars(fallback_stmt).all())
-
-        # If still no questions, get any available MCQ questions
-        if not questions:
-            questions = list(db.scalars(select(QuestionModel).where(QuestionModel.question_type == QuestionType.MCQ)).all())
+        filters = QuestionFilterParams(
+            subject=subject,
+            difficulty=difficulty,
+            question_type=QuestionType.MCQ,
+            is_pyq=is_pyq,
+            skip=0,
+            limit=50,
+        )
+        questions, _ = QuestionRepository.list(db, filters)
 
         if not questions:
             raise HTTPException(
@@ -129,13 +133,14 @@ class QuizService:
         title_parts.append(f"Quiz ({len(selected_questions)} Questions)")
         quiz_title = " ".join(title_parts)
 
-        # Create Quiz in PostgreSQL
-        quiz = QuizRepository.create(
-            db=db,
+        quiz = JsonQuizSession(
+            id=uuid.uuid4(),
             title=quiz_title,
             query_prompt=req.query,
-            question_ids=[q.id for q in selected_questions]
+            question_ids=[str(q.id) for q in selected_questions],
+            total_questions=len(selected_questions),
         )
+        JSON_QUIZ_SESSIONS[quiz.id] = quiz
 
         # Build public response (without correct_answer or explanation)
         public_questions = [
@@ -166,7 +171,9 @@ class QuizService:
 
     @classmethod
     def get_quiz(cls, db: Session, quiz_id: uuid.UUID) -> QuizResponse:
-        quiz = QuizRepository.get_by_id(db, quiz_id)
+        quiz = JSON_QUIZ_SESSIONS.get(quiz_id)
+        if quiz is None:
+            quiz = QuizRepository.get_by_id(db, quiz_id)
         if not quiz:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -209,7 +216,9 @@ class QuizService:
 
     @classmethod
     def submit_answer(cls, db: Session, quiz_id: uuid.UUID, payload: QuizAnswerRequest) -> QuizAnswerResponse:
-        quiz = QuizRepository.get_by_id(db, quiz_id)
+        quiz = JSON_QUIZ_SESSIONS.get(quiz_id)
+        if quiz is None:
+            quiz = QuizRepository.get_by_id(db, quiz_id)
         if not quiz:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -258,13 +267,22 @@ class QuizService:
                 is_correct = True
                 break
 
-        updated_quiz = QuizRepository.record_answer(
-            db=db,
-            quiz=quiz,
-            question_id=str(question.id),
-            selected_answer=payload.selected_answer,
-            is_correct=is_correct
-        )
+        if isinstance(quiz, JsonQuizSession):
+            quiz.answers[str(question.id)] = {
+                "selected_answer": payload.selected_answer,
+                "is_correct": is_correct,
+            }
+            quiz.score = sum(1 for answer in quiz.answers.values() if answer.get("is_correct"))
+            quiz.completed = len(quiz.answers) >= quiz.total_questions
+            updated_quiz = quiz
+        else:
+            updated_quiz = QuizRepository.record_answer(
+                db=db,
+                quiz=quiz,
+                question_id=str(question.id),
+                selected_answer=payload.selected_answer,
+                is_correct=is_correct
+            )
 
         return QuizAnswerResponse(
             question_id=question.id,
@@ -280,7 +298,9 @@ class QuizService:
 
     @classmethod
     def get_summary(cls, db: Session, quiz_id: uuid.UUID) -> QuizSummaryResponse:
-        quiz = QuizRepository.get_by_id(db, quiz_id)
+        quiz = JSON_QUIZ_SESSIONS.get(quiz_id)
+        if quiz is None:
+            quiz = QuizRepository.get_by_id(db, quiz_id)
         if not quiz:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
         return QuizSummaryResponse.model_validate(quiz)

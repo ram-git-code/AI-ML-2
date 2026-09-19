@@ -133,6 +133,45 @@ body {
   margin: 0 auto;
 }
 
+.import-view {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 20px;
+  padding: 2.5rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.import-hero { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 2rem; }
+.import-icon { color: #38bdf8; background: rgba(56, 189, 248, 0.13); border: 1px solid rgba(56, 189, 248, 0.28); border-radius: 14px; padding: 0.8rem; display: flex; }
+.eyebrow { color: #38bdf8; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
+.import-hero h1 { font-size: 2rem; margin: 0.15rem 0 0.35rem; }
+.import-hero p:last-child { color: var(--text-muted); max-width: 650px; }
+.import-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1rem; }
+.upload-zone { min-height: 230px; border: 1px dashed rgba(56, 189, 248, 0.55); border-radius: 14px; background: rgba(56, 189, 248, 0.06); color: #e2e8f0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.55rem; cursor: pointer; font: inherit; }
+.upload-zone:hover:not(:disabled) { background: rgba(56, 189, 248, 0.12); border-color: #38bdf8; }
+.upload-zone span { font-weight: 700; font-size: 1.1rem; }
+.upload-zone small { color: var(--text-muted); text-align: center; max-width: 300px; }
+.import-steps { display: grid; gap: 0.7rem; }
+.import-steps > div { display: flex; gap: 0.8rem; align-items: flex-start; padding: 1rem; background: rgba(15, 23, 42, 0.55); border: 1px solid var(--border-card); border-radius: 12px; color: #38bdf8; }
+.import-steps span { display: grid; gap: 0.15rem; color: var(--text-primary); }
+.import-steps small { color: var(--text-muted); }
+.import-result { margin-top: 1.25rem; padding: 1rem; border-radius: 12px; display: flex; gap: 0.75rem; align-items: flex-start; }
+.import-result div { display: grid; gap: 0.2rem; }
+.import-result span { color: var(--text-muted); }
+.import-result.success { color: #34d399; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); }
+.import-result.progress { color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); }
+.import-result.failure { color: #fca5a5; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 720px) {
+  .navbar { padding: 1rem; align-items: flex-start; gap: 1rem; flex-direction: column; }
+  .nav-tabs { width: 100%; overflow-x: auto; }
+  .nav-tab-btn { white-space: nowrap; }
+  .import-view { padding: 1.25rem; }
+  .import-grid { grid-template-columns: 1fr; }
+}
+
 /* Quiz Generator Chatbot Card */
 .quiz-generator-card {
   background: var(--bg-card);
@@ -968,6 +1007,16 @@ body {
   font-size: 1.05rem;
   font-weight: 700;
   color: #fff;
+}
+
+.tutor-subject-select {
+  max-width: 190px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text-primary);
+  font-size: 0.78rem;
 }
 
 .tutor-sub {

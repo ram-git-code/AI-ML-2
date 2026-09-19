@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Send, X, Sparkles, HelpCircle, MessageSquare } from 'lucide-react';
-import { QuizQuestion } from '../api/quizApi';
+import { Bot, Send, X, Sparkles } from 'lucide-react';
+import { QuizQuestion, getQuestionSubjects } from '../api/quizApi';
 import { sendTutorMessage, ChatMessage } from '../api/aiApi';
 
 interface AITutorDrawerProps {
@@ -19,11 +19,18 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize tutor welcome message when question changes
   useEffect(() => {
+    getQuestionSubjects().then(setSubjects).catch(() => setSubjects([]));
+  }, []);
+
+  useEffect(() => {
     if (question) {
+      setSelectedSubject(question.subject);
       setMessages([
         {
           role: 'assistant',
@@ -54,7 +61,7 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
     setLoading(true);
 
     try {
-      const res = await sendTutorMessage(question ? question.id : null, messageText, newHistory);
+      const res = await sendTutorMessage(question ? question.id : null, selectedSubject || null, messageText, newHistory);
       setMessages((prev) => [...prev, { role: 'assistant', content: res.reply }]);
     } catch (err) {
       setMessages((prev) => [
@@ -91,6 +98,15 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
             <X size={20} />
           </button>
         </div>
+        <select
+          className="tutor-subject-select"
+          value={selectedSubject}
+          onChange={(event) => setSelectedSubject(event.target.value)}
+          aria-label="Tutor subject"
+        >
+          <option value="">All question-bank subjects</option>
+          {subjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+        </select>
 
         {/* Current Question Context Strip */}
         {question && (

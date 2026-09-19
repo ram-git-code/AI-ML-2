@@ -21,6 +21,7 @@ class AITutorMessage(BaseModel):
 
 class AITutorRequest(BaseModel):
     question_id: Optional[uuid.UUID] = None
+    subject: Optional[str] = None
     user_message: str
     chat_history: Optional[List[AITutorMessage]] = Field(default_factory=list)
 
