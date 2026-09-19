@@ -1,6 +1,5 @@
 from fastapi import APIRouter, status, Response
 from app.db.postgres import check_postgres_connection
-from app.db.qdrant import check_qdrant_connection
 from app.core.config import settings
 
 router = APIRouter(tags=["Health & Infrastructure"])
@@ -28,13 +27,3 @@ async def get_postgres_health(response: Response):
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return result
 
-@router.get(
-    "/health/qdrant",
-    summary="Qdrant Vector DB Connectivity Health Check",
-    description="Tests live REST API and SDK connection to Qdrant vector database."
-)
-async def get_qdrant_health(response: Response):
-    result = check_qdrant_connection()
-    if result["status"] != "CONNECTED":
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    return result

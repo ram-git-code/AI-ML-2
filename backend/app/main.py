@@ -12,7 +12,7 @@ app = FastAPI(
     description="""
 🎓 **AI Question Bank + RAG + AI Quiz Tutor**
 
-Production-grade Educational Engine supporting MCQs, PYQs, Qdrant Vector Search, and RAG AI Tutor.
+    Production-grade Educational Engine supporting MCQs, PYQs, PostgreSQL embeddings, and RAG AI Tutor.
 """,
     version=settings.VERSION,
     docs_url="/docs",

@@ -4,11 +4,9 @@ from typing import Any
 import time
 import httpx
 from fastapi import HTTPException, status
-from qdrant_client.http import models as qdrant_models
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.qdrant import get_qdrant_client
 from app.models.enums import Difficulty, QuestionType
 from app.models.question import QuestionModel
 
@@ -129,45 +127,27 @@ def import_questions_in_batches(db: Session, payload: dict[str, Any], progress_c
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
 
     imported = 0
-    for start in range(0, len(normalized), 50):
-        batch = normalized[start:start + 50]
+    for start in range(0, len(normalized), 10):
+        batch = normalized[start:start + 10]
+        vectors = [(model, _embed(text)) for model, text in vector_sources[start:start + 10]]
         try:
-            for model in batch:
+            for model, vector in vectors:
                 existing = db.get(QuestionModel, model.id)
                 if existing:
                     for key, value in model.__dict__.items():
                         if key not in {"_sa_instance_state", "id", "created_at"}:
                             setattr(existing, key, value)
+                    existing.embedding = vector
+                    existing.embedding_model = settings.GOOGLE_EMBEDDING_MODEL
                 else:
+                    model.embedding = vector
+                    model.embedding_model = settings.GOOGLE_EMBEDDING_MODEL
                     db.add(model)
             db.commit()
             imported += len(batch)
             if progress_callback:
-                progress_callback(imported, 0)
+                progress_callback(imported, imported)
         except Exception as error:
             db.rollback()
             raise RuntimeError(f"PostgreSQL batch failed after {imported} questions: {error}") from error
-
-    client = get_qdrant_client()
-    collection = settings.QDRANT_COLLECTION_NAME
-    embedded = 0
-    for start in range(0, len(vector_sources), 10):
-        batch_sources = vector_sources[start:start + 10]
-        vectors = [(model, _embed(text)) for model, text in batch_sources]
-        if not client.collection_exists(collection):
-            client.create_collection(
-                collection_name=collection,
-                vectors_config=qdrant_models.VectorParams(size=len(vectors[0][1]), distance=qdrant_models.Distance.COSINE),
-            )
-        client.upsert(
-            collection_name=collection,
-            points=[qdrant_models.PointStruct(
-                id=str(model.id),
-                vector=vector,
-                payload={"question_id": str(model.id), "subject": model.subject, "topic": model.topic},
-            ) for model, vector in vectors],
-        )
-        embedded += len(vectors)
-        if progress_callback:
-            progress_callback(imported, embedded)
-    return {"imported": imported, "embedded": embedded, "collection": collection}
+    return {"imported": imported, "embedded": imported, "collection": "postgresql"}

@@ -10,10 +10,6 @@ class Settings(BaseSettings):
     # PostgreSQL Database
     DATABASE_URL: str = "postgresql+psycopg://postgres:1234@localhost:5432/ai_project"
 
-    # Qdrant Vector DB
-    QDRANT_URL: str = "http://localhost:6333"
-    QDRANT_COLLECTION_NAME: str = "question_bank"
-
     # Embedding Model
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
 

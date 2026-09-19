@@ -20,6 +20,8 @@ class QuestionModel(Base):
     options: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
     correct_answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    embedding: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    embedding_model: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
 
     subject: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     chapter: Mapped[str] = mapped_column(String(100), nullable=False, index=True)

@@ -43,14 +43,3 @@ export const getPostgresHealth = async (): Promise<HealthResponse> => {
   }
 };
 
-export const getQdrantHealth = async (): Promise<HealthResponse> => {
-  try {
-    const res = await client.get<HealthResponse>('/health/qdrant');
-    return res.data;
-  } catch (err: any) {
-    return {
-      status: 'DISCONNECTED',
-      error: err.response?.data?.error || err.message || 'Qdrant connection failed',
-    };
-  }
-};

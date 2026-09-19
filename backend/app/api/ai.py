@@ -1,9 +1,9 @@
+import asyncio
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.postgres import get_db
 from app.repositories.question_repository import QuestionRepository
-from app.schemas.question import QuestionFilterParams
 from app.schemas.ai import (
     AIExplainRequest,
     AIExplainResponse,
@@ -11,6 +11,7 @@ from app.schemas.ai import (
     AITutorResponse,
 )
 from app.services.llm_service import LLMService
+from app.services.question_import_service import _embed
 
 router = APIRouter(prefix="/api/ai", tags=["AI Tutor & Explanation"])
 
@@ -50,17 +51,13 @@ async def tutor_chat(req: AITutorRequest, db: Session = Depends(get_db)):
     if req.question_id:
         question = QuestionRepository.get_by_id(db, req.question_id)
     if question is None:
-        filters = QuestionFilterParams(subject=req.subject, skip=0, limit=50)
-        questions, _ = QuestionRepository.list(db, filters)
-        terms = {term for term in req.user_message.lower().split() if len(term) > 2}
-        question = max(
-            questions,
-            key=lambda item: sum(
-                term in " ".join((item.question_text, item.subject, item.chapter, item.topic)).lower()
-                for term in terms
-            ),
-            default=None,
-        )
+        try:
+            query_embedding = await asyncio.to_thread(_embed, req.user_message)
+            question = next(iter(QuestionRepository.search_by_embedding(
+                db, query_embedding, subject=req.subject, limit=1
+            )), None)
+        except Exception:
+            question = None
 
     reply = await LLMService.tutor_chat(
         question=question,
@@ -70,5 +67,5 @@ async def tutor_chat(req: AITutorRequest, db: Session = Depends(get_db)):
 
     return AITutorResponse(
         reply=reply,
-        question_id=req.question_id
+        question_id=question.id if question else req.question_id
     )

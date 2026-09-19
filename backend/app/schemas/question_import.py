@@ -7,5 +7,5 @@ class QuestionImportResponse(BaseModel):
     imported: int
     embedded: int
     total: int
-    collection: str = "question_bank"
+    collection: str = "postgresql"
     message: str = ""

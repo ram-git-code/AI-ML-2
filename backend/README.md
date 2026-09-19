@@ -1,6 +1,6 @@
 # AI Question Bank and Quiz Tutor
 
-Backend for the educational question-bank application. It provides a FastAPI HTTP API, PostgreSQL persistence, Qdrant vector indexing, Google Gemini explanations, quiz sessions, and a React frontend integration.
+Backend for the educational question-bank application. It provides a FastAPI HTTP API, PostgreSQL persistence with stored Gemini embeddings, semantic RAG retrieval, Google Gemini explanations, quiz sessions, and a React frontend integration.
 
 ## Architecture
 
@@ -17,17 +17,16 @@ flowchart LR
 		Upload[JSON upload] --> Jobs[Background import job]
 		Jobs --> PG
 		Jobs --> Embed[Gemini embeddings]
-		Embed --> Qdrant[(Qdrant question_bank)]
-		API --> Health[PostgreSQL and Qdrant health checks]
+		Embed --> PG
+		API --> Health[PostgreSQL health check]
 		Health --> PG
-		Health --> Qdrant
 ```
 
 ### Source of truth
 
 All runtime questions used by quiz generation, answer validation, subject selection, and tutor context come from PostgreSQL. The original JSON file is an import source, not a runtime question source.
 
-PostgreSQL stores the normalized question record and its answer/explanation. Qdrant stores embeddings and metadata for indexing and future semantic retrieval. Gemini generates educational explanations and tutor responses; it does not decide the authoritative correct answer.
+PostgreSQL stores the normalized question record, answer, explanation, and Gemini embedding in JSONB columns. RAG retrieval embeds the user message, compares it with stored embeddings using cosine similarity, and supplies the best PostgreSQL question to Gemini. Gemini generates educational explanations and tutor responses; it does not decide the authoritative correct answer.
 
 ### Main modules
 
@@ -40,14 +39,13 @@ PostgreSQL stores the normalized question record and its answer/explanation. Qdr
 | `app/repositories/` | Database access and filtering |
 | `app/services/` | Quiz logic, import normalization, background jobs, and Gemini calls |
 | `app/db/postgres.py` | SQLAlchemy engine and request-scoped sessions |
-| `app/db/qdrant.py` | Qdrant client and connectivity checks |
+| `app/db/postgres.py` | SQLAlchemy engine, sessions, and database health check |
 | `alembic/` | Database migrations |
 
 ## Requirements
 
 - Python 3.12+
 - PostgreSQL 14+ with a database named `ai_project`
-- Qdrant at `http://localhost:6333`
 - Google AI Studio API key for Gemini explanations and embeddings
 - Node.js 18+ for the frontend
 
@@ -57,8 +55,6 @@ Create `backend/.env`:
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/ai_project
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION_NAME=question_bank
 GOOGLE_API_KEY=your_google_ai_studio_key
 GOOGLE_MODEL=gemini-3.6-flash
 GOOGLE_EMBEDDING_MODEL=gemini-embedding-001
@@ -113,10 +109,6 @@ Response:
 
 Runs a live `SELECT 1` against PostgreSQL. Returns `503` when the database is unavailable.
 
-#### `GET /health/qdrant`
-
-Checks Qdrant HTTP health and lists collections. Returns the configured URL, target collection, collection existence, and existing collections. Returns `503` when Qdrant is unavailable.
-
 ### Questions
 
 #### `GET /api/questions/subjects`
@@ -131,7 +123,7 @@ Response:
 
 #### `POST /api/questions/import`
 
-Starts a background import from a JSON multipart upload. The upload must contain a non-empty `Questions` array. Each question is normalized, validated, upserted into PostgreSQL in batches of 50, and embedded into Qdrant in batches of 10.
+Starts a background import from a JSON multipart upload. The upload must contain a non-empty `Questions` array. Each question is normalized, validated, embedded with Gemini, and upserted into PostgreSQL in batches of 10.
 
 Request:
 
@@ -151,7 +143,7 @@ Response: `201 Created`
 	"imported": 0,
 	"embedded": 0,
 	"total": 650,
-	"collection": "question_bank",
+	"collection": "postgresql",
 	"message": "Import started in the background."
 }
 ```
@@ -316,8 +308,8 @@ Request:
 2. FastAPI validates the file and creates an in-memory job record.
 3. A daemon worker opens its own PostgreSQL session.
 4. Questions are normalized and committed to PostgreSQL in batches.
-5. Gemini creates embeddings for normalized question text.
-6. Vectors and question metadata are upserted into Qdrant collection `question_bank`.
+5. Gemini creates an embedding for normalized question text.
+6. The embedding and model name are committed into each PostgreSQL question row.
 7. The frontend polls `GET /api/questions/import/{job_id}` every 1.5 seconds.
 
 PostgreSQL commits happen before embedding work, so a temporary Gemini or Qdrant failure does not discard already stored question rows.
@@ -357,7 +349,7 @@ The main screens are:
 
 - AI Quiz Studio: subject selection, quiz generation, answer evaluation, and AI explanations.
 - Question Bank: JSON upload and import progress polling.
-- Infrastructure: backend, PostgreSQL, and Qdrant health status.
+- Infrastructure: backend and PostgreSQL health status.
 
 ## Tests and troubleshooting
 
@@ -373,7 +365,6 @@ Useful checks:
 ```powershell
 curl http://localhost:8000/health
 curl http://localhost:8000/health/postgres
-curl http://localhost:8000/health/qdrant
 ```
 
-If quiz generation returns `404 No suitable questions found`, import questions first and confirm `GET /api/questions?limit=1` returns rows. If AI explanations fall back to non-Gemini text, verify `GOOGLE_API_KEY` and the configured Gemini model. If import progress disappears after a backend restart, remember that job metadata is currently process-local.
+If quiz generation returns `404 No suitable questions found`, import questions first and confirm `GET /api/questions?limit=1` returns rows. If tutor semantic search cannot find a match, confirm the questions have non-null embeddings and verify `GOOGLE_API_KEY`. If AI explanations fall back to non-Gemini text, verify the configured Gemini model. If import progress disappears after a backend restart, remember that job metadata is currently process-local.

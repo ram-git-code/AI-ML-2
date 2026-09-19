@@ -59,14 +59,14 @@ export const QuestionBankImport: React.FC = () => {
         <button className="upload-zone" onClick={() => inputRef.current?.click()} disabled={loading}>
           {loading ? <LoaderCircle className="spin" size={34} /> : <UploadCloud size={34} />}
           <span>{loading ? 'Indexing questions...' : 'Choose JSON file'}</span>
-          <small>{fileName || 'The file will be stored in PostgreSQL and embedded in Qdrant'}</small>
+          <small>{fileName || 'The file will be stored with embeddings in PostgreSQL'}</small>
           <input ref={inputRef} type="file" accept=".json,application/json" hidden onChange={(event) => handleFile(event.target.files?.[0])} />
         </button>
 
         <div className="import-steps">
           <div><Database size={18} /><span><strong>Validate</strong><small>Checks the Questions array and English translations.</small></span></div>
           <div><Database size={18} /><span><strong>Store</strong><small>Upserts normalized questions in PostgreSQL.</small></span></div>
-          <div><Database size={18} /><span><strong>Index</strong><small>Creates Google embeddings in Qdrant.</small></span></div>
+          <div><Database size={18} /><span><strong>Embed</strong><small>Creates Google embeddings in PostgreSQL.</small></span></div>
         </div>
       </div>
 

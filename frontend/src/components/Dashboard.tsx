@@ -1,24 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { getBackendHealth, getPostgresHealth, getQdrantHealth, HealthResponse } from '../api/healthApi';
+import { getBackendHealth, getPostgresHealth, HealthResponse } from '../api/healthApi';
 
 export const Dashboard: React.FC = () => {
   const [backendStatus, setBackendStatus] = useState<HealthResponse | null>(null);
   const [postgresStatus, setPostgresStatus] = useState<HealthResponse | null>(null);
-  const [qdrantStatus, setQdrantStatus] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [lastChecked, setLastChecked] = useState<string>('');
 
   const fetchHealthStatuses = async () => {
     setLoading(true);
-    const [bRes, pRes, qRes] = await Promise.all([
+    const [bRes, pRes] = await Promise.all([
       getBackendHealth(),
       getPostgresHealth(),
-      getQdrantHealth(),
     ]);
 
     setBackendStatus(bRes);
     setPostgresStatus(pRes);
-    setQdrantStatus(qRes);
     setLastChecked(new Date().toLocaleTimeString());
     setLoading(false);
   };
@@ -81,22 +78,6 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Qdrant Card */}
-        <div className="status-card">
-          <div className="card-top">
-            <h2 className="service-name">Qdrant Vector Engine</h2>
-            {renderBadge(qdrantStatus?.status)}
-          </div>
-          <div className="card-details">
-            <p><strong>URL:</strong> http://localhost:6333</p>
-            <p><strong>Target Collection:</strong> question_bank</p>
-            {qdrantStatus?.existing_collections && (
-              <p><strong>Existing Collections:</strong> {qdrantStatus.existing_collections.join(', ') || 'None'}</p>
-            )}
-            {qdrantStatus?.details && <p style={{ color: '#34d399', fontSize: '0.85rem' }}>✓ {qdrantStatus.details}</p>}
-            {qdrantStatus?.error && <div className="error-msg">{qdrantStatus.error}</div>}
-          </div>
-        </div>
       </div>
 
       <div className="refresh-bar">

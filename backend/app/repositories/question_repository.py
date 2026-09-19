@@ -1,4 +1,5 @@
 import uuid
+import math
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
@@ -6,6 +7,27 @@ from app.models.question import QuestionModel
 from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionFilterParams
 
 class QuestionRepository:
+
+    @staticmethod
+    def search_by_embedding(db: Session, embedding: list[float], subject: Optional[str] = None, limit: int = 5) -> List[QuestionModel]:
+        filters = QuestionFilterParams(subject=subject, skip=0, limit=200)
+        questions, _ = QuestionRepository.list(db, filters)
+        query_norm = math.sqrt(sum(value * value for value in embedding))
+        if not query_norm:
+            return []
+
+        scored = []
+        for question in questions:
+            candidate = question.embedding
+            if not isinstance(candidate, list) or len(candidate) != len(embedding):
+                continue
+            candidate_norm = math.sqrt(sum(value * value for value in candidate))
+            if not candidate_norm:
+                continue
+            score = sum(left * right for left, right in zip(embedding, candidate)) / (query_norm * candidate_norm)
+            scored.append((score, question))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [question for _, question in scored[:limit]]
 
     @staticmethod
     def list_subjects(db: Session) -> List[str]:
