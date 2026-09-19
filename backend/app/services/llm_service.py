@@ -1,6 +1,6 @@
 import json
 import httpx
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, AsyncGenerator
 from app.core.config import settings
 from app.core.logging import logger
 from app.models.question import QuestionModel
@@ -8,6 +8,7 @@ from app.schemas.ai import AITutorMessage
 
 class LLMService:
     GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    GOOGLE_STREAM_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
 
     @classmethod
     def _google_key(cls) -> Optional[str]:
@@ -56,6 +57,145 @@ class LLMService:
         except Exception as error:
             logger.error(f"Error connecting to Google Gemini API: {error}")
         return None
+
+    @classmethod
+    async def stream_gemini_content(
+        cls,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.4,
+        max_tokens: int = 4000
+    ) -> AsyncGenerator[str, None]:
+        """
+        Streams response tokens in real-time from Google Gemini using SSE streaming endpoint.
+        """
+        api_key = cls._google_key()
+        if not api_key:
+            logger.warning("No GOOGLE_API_KEY available for streaming.")
+            return
+
+        system_instruction = next((message["content"] for message in messages if message["role"] == "system"), None)
+        contents = [
+            {
+                "role": "model" if message["role"] == "assistant" else "user",
+                "parts": [{"text": message["content"]}],
+            }
+            for message in messages
+            if message["role"] != "system"
+        ]
+        body: Dict[str, Any] = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens,
+            },
+        }
+        if system_instruction:
+            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
+        candidate_models = [settings.GOOGLE_MODEL]
+        for fallback_m in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-8b"]:
+            if fallback_m not in candidate_models:
+                candidate_models.append(fallback_m)
+
+        for model_name in candidate_models:
+            url = cls.GOOGLE_STREAM_URL.format(model=model_name)
+            headers = {"x-goog-api-key": api_key}
+            token_yielded = False
+
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=15.0)) as client:
+                    async with client.stream("POST", url, headers=headers, json=body) as response:
+                        if response.status_code != 200:
+                            error_body = await response.aread()
+                            logger.warning(f"Gemini streaming with model {model_name} returned status {response.status_code}: {error_body.decode('utf-8', errors='ignore')[:300]}")
+                            # If 429 or 404, try next candidate model
+                            if response.status_code in (429, 404, 503):
+                                continue
+                            return
+
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            line_str = line.strip()
+                            if line_str.startswith("data: "):
+                                data_json = line_str[6:].strip()
+                                if data_json == "[DONE]":
+                                    break
+                                try:
+                                    payload = json.loads(data_json)
+                                    candidates = payload.get("candidates", [])
+                                    if candidates:
+                                        parts = candidates[0].get("content", {}).get("parts", [])
+                                        for part in parts:
+                                            chunk_text = part.get("text", "")
+                                            if chunk_text:
+                                                token_yielded = True
+                                                yield chunk_text
+                                except json.JSONDecodeError:
+                                    continue
+                if token_yielded:
+                    return
+            except Exception as stream_err:
+                logger.warning(f"Exception during Gemini streaming with {model_name}: {stream_err}")
+                continue
+
+    @classmethod
+    async def generate_topic_quiz_questions(
+        cls,
+        topic: str,
+        subject: Optional[str] = None,
+        count: int = 5,
+        difficulty: str = "medium"
+    ) -> List[Dict[str, Any]]:
+        """
+        Generates high quality MCQ questions for a specific topic using Gemini when database does not have enough existing questions.
+        """
+        system_prompt = (
+            "You are a master academic assessment designer. Create high-quality, conceptual, and pedagogical Multiple Choice Questions (MCQs). "
+            "Output ONLY a valid JSON array of objects. Do not include markdown formatting or extra text outside the JSON array.\n"
+            "Each object MUST have the following keys:\n"
+            "[\n"
+            "  {\n"
+            '    "question_text": "Clear, concise question statement",\n'
+            '    "options": ["A. First option", "B. Second option", "C. Third option", "D. Fourth option"],\n'
+            '    "correct_answer": "A",\n'
+            '    "explanation": "Detailed explanation of why this answer is correct",\n'
+            '    "subject": "Subject name",\n'
+            '    "chapter": "Chapter name",\n'
+            '    "topic": "Topic name",\n'
+            f'    "difficulty": "{difficulty.upper() if difficulty.upper() in ["EASY", "MEDIUM", "HARD"] else "MEDIUM"}"\n'
+            "  }\n"
+            "]"
+        )
+        user_prompt = (
+            f"Generate exactly {count} distinct multiple-choice questions for the topic: '{topic}'"
+            + (f" in the subject '{subject}'" if subject else "")
+            + f" with difficulty level '{difficulty}'. "
+            "Ensure options are labeled 'A. ...', 'B. ...', 'C. ...', 'D. ...' and correct_answer is just the single letter ('A', 'B', 'C', or 'D')."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+
+        llm_reply = await cls._call_google(messages, temperature=0.3, max_tokens=2500)
+        if llm_reply:
+            try:
+                cleaned = llm_reply.strip()
+                if cleaned.startswith("```json"):
+                    cleaned = cleaned[7:]
+                if cleaned.startswith("```"):
+                    cleaned = cleaned[3:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                parsed = json.loads(cleaned.strip())
+                if isinstance(parsed, list) and len(parsed) > 0:
+                    return parsed
+            except Exception as parse_err:
+                logger.warning(f"Could not parse Gemini generated quiz JSON: {parse_err}. Content: {llm_reply}")
+
+        return []
 
     @classmethod
     async def generate_explanation(cls, question: QuestionModel, user_answer: str) -> Dict[str, str]:

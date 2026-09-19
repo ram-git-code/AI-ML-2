@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Sparkles, Activity, FileJson, GraduationCap } from 'lucide-react';
+import { Sparkles, Activity, FileJson, GraduationCap, Bot } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { QuizGeneratorChat } from './components/QuizGeneratorChat';
 import { QuizPlayer } from './components/QuizPlayer';
 import { QuizData } from './api/quizApi';
 import { QuestionBankImport } from './components/QuestionBankImport';
+import { AITutorChat } from './components/AITutorChat';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'quiz' | 'import' | 'dashboard'>('quiz');
+  const [activeTab, setActiveTab] = useState<'tutor' | 'quiz' | 'import' | 'dashboard'>('tutor');
   const [activeQuiz, setActiveQuiz] = useState<QuizData | null>(null);
 
   const handleQuizGenerated = (quiz: QuizData) => {
     setActiveQuiz(quiz);
+    setActiveTab('quiz');
   };
 
   const handleResetQuiz = () => {
@@ -33,6 +35,12 @@ export const App: React.FC = () => {
         </div>
 
         <nav className="nav-tabs">
+          <button
+            className={`nav-tab-btn ${activeTab === 'tutor' ? 'active' : ''}`}
+            onClick={() => setActiveTab('tutor')}
+          >
+            <Bot size={16} /> AI Tutor Chat
+          </button>
           <button
             className={`nav-tab-btn ${activeTab === 'quiz' ? 'active' : ''}`}
             onClick={() => setActiveTab('quiz')}
@@ -56,7 +64,9 @@ export const App: React.FC = () => {
 
       {/* Main View Area */}
       <main className="main-content">
-        {activeTab === 'quiz' ? (
+        {activeTab === 'tutor' ? (
+          <AITutorChat onStartQuiz={handleQuizGenerated} />
+        ) : activeTab === 'quiz' ? (
           <div className="quiz-view-container">
             {activeQuiz ? (
               <QuizPlayer quiz={activeQuiz} onReset={handleResetQuiz} />

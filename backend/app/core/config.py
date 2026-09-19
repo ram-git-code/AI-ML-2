@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     GOOGLE_MODEL: str = "gemini-3.6-flash"
     GOOGLE_EMBEDDING_MODEL: str = "gemini-embedding-001"
 
+    # AI Tutor Configuration
+    AI_TUTOR_TOP_K: int = 5
+    AI_TUTOR_MAX_HISTORY: int = 10
+    AI_TUTOR_MAX_TOKENS: int = 4000
+    AI_TUTOR_TEMPERATURE: float = 0.4
+    RAG_MIN_SIMILARITY: float = 0.65
+
     # CORS Configuration
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",

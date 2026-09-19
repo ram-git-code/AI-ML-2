@@ -9,14 +9,19 @@ from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionFilterP
 class QuestionRepository:
 
     @staticmethod
-    def search_by_embedding(db: Session, embedding: list[float], subject: Optional[str] = None, limit: int = 5) -> List[QuestionModel]:
+    def search_by_embedding(db: Session, embedding: list[float], subject: Optional[str] = None, limit: int = 5, min_similarity: float = 0.0) -> List[QuestionModel]:
+        scored = QuestionRepository.search_by_embedding_with_scores(db, embedding, subject=subject, limit=limit, min_similarity=min_similarity)
+        return [q for _, q in scored]
+
+    @staticmethod
+    def search_by_embedding_with_scores(db: Session, embedding: list[float], subject: Optional[str] = None, limit: int = 5, min_similarity: float = 0.0) -> List[Tuple[float, QuestionModel]]:
         filters = QuestionFilterParams(subject=subject, skip=0, limit=200)
         questions, _ = QuestionRepository.list(db, filters)
         query_norm = math.sqrt(sum(value * value for value in embedding))
         if not query_norm:
             return []
 
-        scored = []
+        scored: List[Tuple[float, QuestionModel]] = []
         for question in questions:
             candidate = question.embedding
             if not isinstance(candidate, list) or len(candidate) != len(embedding):
@@ -25,9 +30,10 @@ class QuestionRepository:
             if not candidate_norm:
                 continue
             score = sum(left * right for left, right in zip(embedding, candidate)) / (query_norm * candidate_norm)
-            scored.append((score, question))
+            if score >= min_similarity:
+                scored.append((score, question))
         scored.sort(key=lambda item: item[0], reverse=True)
-        return [question for _, question in scored[:limit]]
+        return scored[:limit]
 
     @staticmethod
     def list_subjects(db: Session) -> List[str]:
