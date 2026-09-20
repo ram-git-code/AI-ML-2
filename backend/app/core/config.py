@@ -13,10 +13,18 @@ class Settings(BaseSettings):
     # Embedding Model
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
 
-    # Google AI Studio / Gemini
-    GOOGLE_API_KEY: str = ""
-    GOOGLE_MODEL: str = "gemini-3.6-flash"
-    GOOGLE_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    # NVIDIA NIM Configuration
+    NVIDIA_API_KEY: str = "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"
+    NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
+    NVIDIA_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
+    NVIDIA_FALLBACK_MODELS: List[str] = [
+        "meta/llama-3.2-11b-vision-instruct",
+        "meta/llama-3.2-90b-vision-instruct",
+        "google/gemma-3-12b-it",
+        "google/gemma-3-4b-it",
+        "nvidia/nemotron-4-340b-instruct"
+    ]
+    NVIDIA_EMBEDDING_MODEL: str = "nvidia/embed-qa-4"
 
     # AI Tutor Configuration
     AI_TUTOR_TOP_K: int = 5

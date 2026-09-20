@@ -7,99 +7,99 @@ from app.models.question import QuestionModel
 from app.schemas.ai import AITutorMessage
 
 class LLMService:
-    GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    GOOGLE_STREAM_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
-
     @classmethod
-    def _google_key(cls) -> Optional[str]:
-        configured_key = settings.GOOGLE_API_KEY.strip()
+    def _nvidia_key(cls) -> Optional[str]:
+        configured_key = settings.NVIDIA_API_KEY.strip()
         return configured_key or None
 
     @classmethod
-    async def _call_google(cls, messages: List[Dict[str, str]], temperature: float = 0.2, max_tokens: int = 1000) -> Optional[str]:
-        api_key = cls._google_key()
+    async def _call_nvidia(
+        cls,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.2,
+        max_tokens: int = 2000,
+        model_override: Optional[str] = None
+    ) -> Optional[str]:
+        api_key = cls._nvidia_key()
         if not api_key:
+            logger.warning("No NVIDIA_API_KEY available.")
             return None
 
-        system_instruction = next((message["content"] for message in messages if message["role"] == "system"), None)
-        contents = [
-            {
-                "role": "model" if message["role"] == "assistant" else "user",
-                "parts": [{"text": message["content"]}],
-            }
-            for message in messages
-            if message["role"] != "system"
-        ]
-        body = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-            },
-        }
-        if system_instruction:
-            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        candidate_models = [model_override] if model_override else [settings.NVIDIA_MODEL]
+        for fallback_m in settings.NVIDIA_FALLBACK_MODELS:
+            if fallback_m not in candidate_models:
+                candidate_models.append(fallback_m)
 
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    cls.GOOGLE_API_URL.format(model=settings.GOOGLE_MODEL),
-                    headers={"x-goog-api-key": api_key},
-                    json=body,
-                )
-                if response.status_code == 200:
-                    candidates = response.json().get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        return "".join(part.get("text", "") for part in parts).strip() or None
-                else:
-                    logger.warning(f"Google Gemini API returned status {response.status_code}: {response.text[:500]}")
-        except Exception as error:
-            logger.error(f"Error connecting to Google Gemini API: {error}")
+        url = f"{settings.NVIDIA_BASE_URL.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        for model_name in candidate_models:
+            body = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=15.0)) as client:
+                    response = await client.post(url, headers=headers, json=body)
+                    if response.status_code == 200:
+                        data = response.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            content = choices[0].get("message", {}).get("content", "")
+                            if content and content.strip():
+                                return content.strip()
+                    else:
+                        logger.warning(f"NVIDIA API with model {model_name} returned status {response.status_code}: {response.text[:300]}")
+                        if response.status_code in (404, 410, 429, 503):
+                            continue
+            except Exception as error:
+                logger.error(f"Error connecting to NVIDIA API with {model_name}: {error}")
+                continue
+
         return None
 
+    # Backward compatibility alias
+    _call_google = _call_nvidia
+
     @classmethod
-    async def stream_gemini_content(
+    async def stream_nvidia_content(
         cls,
         messages: List[Dict[str, str]],
         temperature: float = 0.4,
         max_tokens: int = 4000
     ) -> AsyncGenerator[str, None]:
         """
-        Streams response tokens in real-time from Google Gemini using SSE streaming endpoint.
+        Streams response tokens in real-time from NVIDIA NIM using SSE streaming endpoint.
         """
-        api_key = cls._google_key()
+        api_key = cls._nvidia_key()
         if not api_key:
-            logger.warning("No GOOGLE_API_KEY available for streaming.")
+            logger.warning("No NVIDIA_API_KEY available for streaming.")
             return
 
-        system_instruction = next((message["content"] for message in messages if message["role"] == "system"), None)
-        contents = [
-            {
-                "role": "model" if message["role"] == "assistant" else "user",
-                "parts": [{"text": message["content"]}],
-            }
-            for message in messages
-            if message["role"] != "system"
-        ]
-        body: Dict[str, Any] = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-            },
-        }
-        if system_instruction:
-            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-
-        candidate_models = [settings.GOOGLE_MODEL]
-        for fallback_m in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-8b"]:
+        candidate_models = [settings.NVIDIA_MODEL]
+        for fallback_m in settings.NVIDIA_FALLBACK_MODELS:
             if fallback_m not in candidate_models:
                 candidate_models.append(fallback_m)
 
+        url = f"{settings.NVIDIA_BASE_URL.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
         for model_name in candidate_models:
-            url = cls.GOOGLE_STREAM_URL.format(model=model_name)
-            headers = {"x-goog-api-key": api_key}
+            body = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True
+            }
             token_yielded = False
 
             try:
@@ -107,9 +107,8 @@ class LLMService:
                     async with client.stream("POST", url, headers=headers, json=body) as response:
                         if response.status_code != 200:
                             error_body = await response.aread()
-                            logger.warning(f"Gemini streaming with model {model_name} returned status {response.status_code}: {error_body.decode('utf-8', errors='ignore')[:300]}")
-                            # If 429 or 404, try next candidate model
-                            if response.status_code in (429, 404, 503):
+                            logger.warning(f"NVIDIA streaming with model {model_name} returned status {response.status_code}: {error_body.decode('utf-8', errors='ignore')[:300]}")
+                            if response.status_code in (404, 410, 429, 503):
                                 continue
                             return
 
@@ -123,21 +122,23 @@ class LLMService:
                                     break
                                 try:
                                     payload = json.loads(data_json)
-                                    candidates = payload.get("candidates", [])
-                                    if candidates:
-                                        parts = candidates[0].get("content", {}).get("parts", [])
-                                        for part in parts:
-                                            chunk_text = part.get("text", "")
-                                            if chunk_text:
-                                                token_yielded = True
-                                                yield chunk_text
+                                    choices = payload.get("choices", [])
+                                    if choices:
+                                        delta = choices[0].get("delta", {})
+                                        chunk_text = delta.get("content", "")
+                                        if chunk_text:
+                                            token_yielded = True
+                                            yield chunk_text
                                 except json.JSONDecodeError:
                                     continue
                 if token_yielded:
                     return
             except Exception as stream_err:
-                logger.warning(f"Exception during Gemini streaming with {model_name}: {stream_err}")
+                logger.warning(f"Exception during NVIDIA streaming with {model_name}: {stream_err}")
                 continue
+
+    # Backward compatibility alias
+    stream_gemini_content = stream_nvidia_content
 
     @classmethod
     async def generate_topic_quiz_questions(
@@ -148,7 +149,7 @@ class LLMService:
         difficulty: str = "medium"
     ) -> List[Dict[str, Any]]:
         """
-        Generates high quality MCQ questions for a specific topic using Gemini when database does not have enough existing questions.
+        Generates high quality MCQ questions for a specific topic using NVIDIA NIM when database does not have enough existing questions.
         """
         system_prompt = (
             "You are a master academic assessment designer. Create high-quality, conceptual, and pedagogical Multiple Choice Questions (MCQs). "
@@ -179,7 +180,7 @@ class LLMService:
             {"role": "user", "content": user_prompt}
         ]
 
-        llm_reply = await cls._call_google(messages, temperature=0.3, max_tokens=2500)
+        llm_reply = await cls._call_nvidia(messages, temperature=0.3, max_tokens=2500)
         if llm_reply:
             try:
                 cleaned = llm_reply.strip()
@@ -193,7 +194,7 @@ class LLMService:
                 if isinstance(parsed, list) and len(parsed) > 0:
                     return parsed
             except Exception as parse_err:
-                logger.warning(f"Could not parse Gemini generated quiz JSON: {parse_err}. Content: {llm_reply}")
+                logger.warning(f"Could not parse NVIDIA generated quiz JSON: {parse_err}. Content: {llm_reply}")
 
         return []
 
@@ -231,11 +232,10 @@ class LLMService:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
-        llm_reply = await cls._call_google(messages, temperature=0.1)
+        llm_reply = await cls._call_nvidia(messages, temperature=0.1)
 
         if llm_reply:
             try:
-                # Clean possible markdown block
                 cleaned = llm_reply.strip()
                 if cleaned.startswith("```json"):
                     cleaned = cleaned[7:]
@@ -247,7 +247,7 @@ class LLMService:
                 if all(k in parsed for k in ("why_wrong", "why_correct", "key_takeaway", "full_explanation")):
                     return parsed
             except Exception as parse_err:
-                logger.warning(f"Could not parse Gemini JSON reply: {parse_err}. Content: {llm_reply}")
+                logger.warning(f"Could not parse NVIDIA JSON reply: {parse_err}. Content: {llm_reply}")
 
         # Fallback educational explanation
         if is_match:
@@ -280,7 +280,7 @@ class LLMService:
         """
         system_prompt = (
             "You are an encouraging, expert AI Educational Tutor helping a student. "
-            "Be conversational, clear, and pedagodical. "
+            "Be conversational, clear, and pedagogical. "
             "Use bullet points or concise paragraphs where helpful. "
             "Never contradict the authoritative database correct answer. "
             "If the student asks for mnemonics, simplified explanations, or examples, provide clear, intuitive ones."
@@ -304,12 +304,12 @@ class LLMService:
         messages = [{"role": "system", "content": system_prompt}]
 
         if chat_history:
-            for msg in chat_history[-6:]:  # Keep recent context
+            for msg in chat_history[-6:]:
                 messages.append({"role": msg.role, "content": msg.content})
 
         messages.append({"role": "user", "content": user_message})
 
-        llm_reply = await cls._call_google(messages, temperature=0.3, max_tokens=800)
+        llm_reply = await cls._call_nvidia(messages, temperature=0.3, max_tokens=800)
         if llm_reply:
             return llm_reply
 

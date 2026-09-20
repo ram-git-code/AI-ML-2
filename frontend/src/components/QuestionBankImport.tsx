@@ -66,7 +66,7 @@ export const QuestionBankImport: React.FC = () => {
         <div className="import-steps">
           <div><Database size={18} /><span><strong>Validate</strong><small>Checks the Questions array and English translations.</small></span></div>
           <div><Database size={18} /><span><strong>Store</strong><small>Upserts normalized questions in PostgreSQL.</small></span></div>
-          <div><Database size={18} /><span><strong>Embed</strong><small>Creates Google embeddings in PostgreSQL.</small></span></div>
+          <div><Database size={18} /><span><strong>Embed</strong><small>Creates NVIDIA vector embeddings in PostgreSQL.</small></span></div>
         </div>
       </div>
 
